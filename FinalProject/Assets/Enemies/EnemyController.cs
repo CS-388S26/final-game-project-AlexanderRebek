@@ -15,6 +15,9 @@ public class EnemyController : MonoBehaviour
     [Header("Health")]
     [Min(1)] public float maxHealth = 100f;
 
+    [Tooltip("Damage dealt to the player when this enemy reaches the end.")]
+    public int damageToPlayer = 10;
+
     [Header("Movement events")]
     public UnityEvent onReachedEnd;
     public UnityEvent<int> onReachedCheckpoint;
@@ -52,13 +55,15 @@ public class EnemyController : MonoBehaviour
         MoveTowardsCurrentCheckpoint();
     }
 
-    // Initialization called by EnemySpawner
+    // Initialization called by EnemySpawner — now accepts per-round health
 
-    public void Initialize(PathManager pathManager)
+    public void Initialize(PathManager pathManager, float health, float speed)
     {
         _pathManager = pathManager;
         _currentCheckpointIndex = 0;
-        _currentHealth = maxHealth;
+        maxHealth = health;
+        _currentHealth = health;
+        moveSpeed = speed;
         _isDead = false;
 
         transform.position = _pathManager.GetCheckpoint(0).position;
@@ -103,6 +108,8 @@ public class EnemyController : MonoBehaviour
         {
             _moving = false;
             onReachedEnd?.Invoke();
+            PlayerHealth.Instance?.TakeDamage(damageToPlayer);
+            RoundManager.Instance?.OnEnemyRemoved();
             Destroy(gameObject);
         }
         else
@@ -134,6 +141,7 @@ public class EnemyController : MonoBehaviour
         _isDead = true;
         _moving = false;
         onDeath?.Invoke();
+        RoundManager.Instance?.OnEnemyRemoved();
         Destroy(gameObject);
     }
 

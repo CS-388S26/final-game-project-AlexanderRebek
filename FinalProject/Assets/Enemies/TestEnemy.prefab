@@ -33,7 +33,7 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 5
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!33 &6237334471143948663
 MeshFilter:
@@ -118,20 +118,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f35a7df6d81c7d4cad0bbe0f0d8935f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 3
+  moveSpeed: 5
   waypointThreshold: 0.1
   smoothRotation: 1
   rotationSpeed: 10
   maxHealth: 100
-  OnReachedEnd:
+  damageToPlayer: 10
+  onReachedEnd:
     m_PersistentCalls:
       m_Calls: []
-  OnReachedCheckpoint:
+  onReachedCheckpoint:
     m_PersistentCalls:
       m_Calls: []
-  OnHealthChanged:
+  onHealthChanged:
     m_PersistentCalls:
       m_Calls: []
-  OnDeath:
+  onDeath:
     m_PersistentCalls:
       m_Calls: []

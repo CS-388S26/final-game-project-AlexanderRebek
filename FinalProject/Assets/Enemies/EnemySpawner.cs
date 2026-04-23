@@ -18,11 +18,23 @@ public class EnemySpawner : MonoBehaviour
 
     private int _spawnedCount = 0;
     private bool _spawning = false;
+    private float _enemyHealth = 100f;
+    private float _enemySpeed  = 2f;
 
     private void Start()
     {
         if (!ValidateReferences()) return;
-        StartSpawning();
+    }
+
+    // Called by RoundManager before each round
+
+    public void ConfigureRound(int enemyCount, float spawnInterval, float enemyHealth, float enemySpeed)
+    {
+        maxEnemies         = enemyCount;
+        this.spawnInterval = spawnInterval;
+        _enemyHealth       = enemyHealth;
+        _enemySpeed        = enemySpeed;
+        _spawnedCount      = 0;
     }
 
     // Public API
@@ -63,7 +75,7 @@ public class EnemySpawner : MonoBehaviour
 
         EnemyController controller = instance.GetComponent<EnemyController>();
         if (controller != null)
-            controller.Initialize(pathManager);
+            controller.Initialize(pathManager, _enemyHealth, _enemySpeed);
         else
             Debug.LogError("[EnemySpawner] Enemy prefab is missing an EnemyController component.");
 
