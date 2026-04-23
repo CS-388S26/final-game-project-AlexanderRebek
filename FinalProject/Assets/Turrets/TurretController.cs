@@ -6,34 +6,26 @@ using UnityEngine;
 public class TurretController : MonoBehaviour
 {
     [Header("References")]
-    [Tooltip("Point from which bullets are spawned (child of this GameObject).")]
     public Transform firePoint;
-
-    [Tooltip("Bullet prefab (must have the Bullet script).")]
     public GameObject bulletPrefab;
 
     [Header("Stats")]
     public float attackRange = 8f;
-
-    [Tooltip("Shots per second.")]
-    [Min(0.01f)]
-    public float fireRate = 1f;
-
-    [Tooltip("Rotation speed in degrees per second.")]
+    [Min(0.01f)] public float fireRate = 1f;
     public float rotationSpeed = 120f;
 
     [Header("Target update")]
-    [Tooltip("How often (seconds) the turret checks for a more advanced enemy in range.")]
     public float targetUpdateInterval = 0.25f;
-
-    [Tooltip("How many more world units ahead a new enemy must be before the turret switches targets.")]
     public float targetSwitchThreshold = 1f;
+
+    [Header("Range indicator")]
+    public Color rangeColor = Color.yellow;
+    public float rangeLineWidth = 0.1f;
 
     private float _fireCooldown = 0f;
     private float _targetUpdateTimer = 0f;
     private EnemyController _currentTarget;
-
-    // Unity lifecycle
+    private LineRenderer _lineRenderer;
 
     private void Update()
     {
@@ -88,16 +80,14 @@ public class TurretController : MonoBehaviour
             _currentTarget = best;
     }
 
-    // Internal logic
-
     private void RotateTowardsTarget()
     {
         Vector3 direction = _currentTarget.transform.position - transform.position;
         direction.y = 0f;
         if (direction == Vector3.zero) return;
 
-        Quaternion targetRot = Quaternion.LookRotation(direction);
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, rotationSpeed * Time.deltaTime);
+        transform.rotation = Quaternion.RotateTowards(
+            transform.rotation, Quaternion.LookRotation(direction), rotationSpeed * Time.deltaTime);
     }
 
     private void Shoot()
@@ -114,6 +104,42 @@ public class TurretController : MonoBehaviour
     }
 
     // Attack range gizmo
+
+    public void ShowRangeIndicator()
+    {
+        if (_lineRenderer == null) BuildLineRenderer();
+        _lineRenderer.enabled = true;
+    }
+
+    public void HideRangeIndicator()
+    {
+        if (_lineRenderer != null) _lineRenderer.enabled = false;
+    }
+
+    private void BuildLineRenderer()
+    {
+        _lineRenderer = gameObject.AddComponent<LineRenderer>();
+        _lineRenderer.useWorldSpace = true;
+        _lineRenderer.loop = true;
+        _lineRenderer.widthMultiplier = rangeLineWidth;
+        _lineRenderer.positionCount = 64;
+        _lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        _lineRenderer.startColor = rangeColor;
+        _lineRenderer.endColor   = rangeColor;
+        _lineRenderer.sortingOrder = 10;
+
+        for (int i = 0; i < 64; i++)
+        {
+            float angle = i * Mathf.PI * 2f / 64;
+            float x = transform.position.x + Mathf.Cos(angle) * attackRange;
+            float z = transform.position.z + Mathf.Sin(angle) * attackRange;
+            _lineRenderer.SetPosition(i, new Vector3(x, 0.2f, z));
+        }
+
+        _lineRenderer.enabled = false;
+    }
+
+    // Editor gizmo
 
 #if UNITY_EDITOR
     private void OnDrawGizmosSelected()

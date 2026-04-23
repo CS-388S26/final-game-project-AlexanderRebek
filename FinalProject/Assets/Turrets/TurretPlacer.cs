@@ -17,7 +17,7 @@ public class TurretPlacer : MonoBehaviour
     public PlacementZone[] zones;
 
     [Header("Raycast")]
-    [Tooltip("Set this to your ground layer only. Do NOT use Everything.")]
+    [Tooltip("Ground layer only — do NOT use Everything.")]
     public LayerMask groundLayerMask;
     public Camera cam;
 
@@ -28,19 +28,33 @@ public class TurretPlacer : MonoBehaviour
     [Header("Turret collision")]
     public float turretRadius = 1f;
 
-    [Header("Double tap settings")]
-    [Tooltip("Maximum seconds between two taps to count as a double tap.")]
+    [Header("Double tap")]
     public float doubleTapInterval = 0.3f;
 
+    [Header("Range indicator — hold input")]
+    [Tooltip("Seconds to hold on a turret before its range appears.")]
+    public float holdDuration = 1f;
+    [Tooltip("Normalised pressure (0-1) for immediate trigger on force-touch devices.")]
+    [Range(0f, 1f)]
+    public float pressureThreshold = 0.75f;
+
+    // Placement state
     private GameObject _ghostInstance;
     private GameObject _pendingPrefab;
     private int _pendingCost;
     private bool _isPlacing = false;
+    private float _ghostYOffset = 0f;   // Offset to lift the turret so its base sits on the ground
 
     // Double tap tracking
     private float _lastTapTime = -999f;
     private Vector2 _lastTapPosition;
-    private const float DoubleTapMaxDistance = 40f; // pixels
+    private const float DoubleTapMaxDistance = 40f;
+
+    // Hold / range indicator state
+    private bool _holding = false;
+    private float _holdTimer = 0f;
+    private TurretController _holdTarget;
+    private TurretController _activeRangeTurret;
 
     private static readonly List<PlacedTurret> _placedTurrets = new List<PlacedTurret>();
 
@@ -63,27 +77,19 @@ public class TurretPlacer : MonoBehaviour
         if (_isPlacing)
             UpdatePlacementMode();
         else
-            CheckForDoubleTap();
+            UpdateIdleMode();
     }
 
     // Placement mode update
 
     private void UpdatePlacementMode()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            CancelPlacement();
-            return;
-        }
+        if (Input.GetKeyDown(KeyCode.Escape)) { CancelPlacement(); return; }
 
 #if UNITY_EDITOR || UNITY_STANDALONE
         UpdateGhostPosition(Input.mousePosition);
-
-        // Left click on the map (not on UI) confirms placement
         if (Input.GetMouseButtonDown(0) && !IsPointerOverUI(Input.mousePosition))
             TryConfirmPlacement(Input.mousePosition);
-
-        // Right click cancels
         if (Input.GetMouseButtonDown(1))
             CancelPlacement();
 #else
@@ -91,7 +97,6 @@ public class TurretPlacer : MonoBehaviour
         {
             Touch touch = Input.GetTouch(0);
             UpdateGhostPosition(touch.position);
-
             if (touch.phase == TouchPhase.Began && !IsPointerOverUI(touch.position))
                 TryConfirmPlacement(touch.position);
         }
@@ -104,89 +109,152 @@ public class TurretPlacer : MonoBehaviour
 
     // Double tap detection (when not in placement mode)
 
-    private void CheckForDoubleTap()
+    private void UpdateIdleMode()
     {
-        Vector2 tapPos = Vector2.zero;
-        bool tapped = false;
-
 #if UNITY_EDITOR || UNITY_STANDALONE
+        HandleMouseIdle();
+#else
+        HandleTouchIdle();
+#endif
+    }
+
+    private void HandleMouseIdle()
+    {
         if (Input.GetMouseButtonDown(0) && !IsPointerOverUI(Input.mousePosition))
         {
-            tapPos = Input.mousePosition;
-            tapped = true;
-        }
-#else
-        if (Input.touchCount == 1)
-        {
-            Touch touch = Input.GetTouch(0);
-            if (touch.phase == TouchPhase.Began && !IsPointerOverUI(touch.position))
+            Vector2 pos = Input.mousePosition;
+            TurretController hit = RaycastTurret(pos);
+
+            if (hit != null && IsDoubleTap(pos))
             {
-                tapPos = touch.position;
-                tapped = true;
+                RemoveTurret(hit);
+                ResetDoubleTap();
+                return;
             }
+            RecordTap(pos);
+
+            if (hit != null) BeginHold(hit);
+            else             HideActiveRange();
         }
-#endif
 
-        if (!tapped) return;
-
-        float timeSinceLast = Time.unscaledTime - _lastTapTime;
-        float distFromLast  = Vector2.Distance(tapPos, _lastTapPosition);
-
-        if (timeSinceLast <= doubleTapInterval && distFromLast <= DoubleTapMaxDistance)
+        if (Input.GetMouseButton(0) && _holding)
         {
-            // Double tap — check if it hit a placed turret
-            TryRemoveTurretAt(tapPos);
-            _lastTapTime = -999f; // Reset so a third tap doesn't trigger again
+            _holdTimer += Time.deltaTime;
+            if (_holdTimer >= holdDuration) ShowRange(_holdTarget);
         }
-        else
+
+        if (Input.GetMouseButtonUp(0))
         {
-            _lastTapTime     = Time.unscaledTime;
-            _lastTapPosition = tapPos;
+            HideActiveRange();
+            CancelHold();
+        }
+    }
+
+    private void HandleTouchIdle()
+    {
+        if (Input.touchCount == 0)
+        {
+            if (_holding) { HideActiveRange(); CancelHold(); }
+            return;
+        }
+
+        Touch touch = Input.GetTouch(0);
+        if (IsPointerOverUI(touch.position)) return;
+
+        if (touch.phase == TouchPhase.Began)
+        {
+            TurretController hit = RaycastTurret(touch.position);
+
+            if (hit != null && IsDoubleTap(touch.position))
+            {
+                RemoveTurret(hit);
+                ResetDoubleTap();
+                return;
+            }
+            RecordTap(touch.position);
+
+            if (hit != null)
+            {
+                BeginHold(hit);
+                if (touch.pressure >= pressureThreshold) ShowRange(hit);
+            }
+            else HideActiveRange();
+        }
+
+        if ((touch.phase == TouchPhase.Stationary || touch.phase == TouchPhase.Moved) && _holding)
+        {
+            _holdTimer += Time.deltaTime;
+            if (_holdTimer >= holdDuration || touch.pressure >= pressureThreshold)
+                ShowRange(_holdTarget);
+        }
+
+        if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
+        {
+            HideActiveRange();
+            CancelHold();
         }
     }
 
     // Turret removal on double tap
 
-    private void TryRemoveTurretAt(Vector2 screenPos)
+    private bool IsDoubleTap(Vector2 pos) =>
+        Time.unscaledTime - _lastTapTime <= doubleTapInterval &&
+        Vector2.Distance(pos, _lastTapPosition) <= DoubleTapMaxDistance;
+
+    private void RecordTap(Vector2 pos)
     {
-        Ray ray = cam.ScreenPointToRay(screenPos);
-        if (!Physics.Raycast(ray, out RaycastHit hit, 200f)) return;
+        _lastTapTime     = Time.unscaledTime;
+        _lastTapPosition = pos;
+    }
 
-        TurretController tc = hit.collider.GetComponentInParent<TurretController>();
-        if (tc == null) return;
+    private void ResetDoubleTap() => _lastTapTime = -999f;
 
+    // Hold helpers
+
+    private void BeginHold(TurretController turret)
+    {
+        _holding    = true;
+        _holdTimer  = 0f;
+        _holdTarget = turret;
+    }
+
+    private void CancelHold()
+    {
+        _holding    = false;
+        _holdTimer  = 0f;
+        _holdTarget = null;
+    }
+
+    // Range indicator helpers
+
+    private void ShowRange(TurretController turret)
+    {
+        if (turret == null || turret == _activeRangeTurret) return;
+        HideActiveRange();
+        turret.ShowRangeIndicator();
+        _activeRangeTurret = turret;
+    }
+
+    private void HideActiveRange()
+    {
+        if (_activeRangeTurret == null) return;
+        _activeRangeTurret.HideRangeIndicator();
+        _activeRangeTurret = null;
+    }
+
+    // Turret removal
+
+    private void RemoveTurret(TurretController tc)
+    {
         PlacedTurret entry = _placedTurrets.Find(t => t.controller == tc);
         if (entry == null) return;
-
         TurretShopUI.Instance?.AddMoney(entry.cost);
         _placedTurrets.Remove(entry);
         Destroy(tc.gameObject);
     }
 
-    // Ghost
-
-    private void UpdateGhostPosition(Vector2 screenPos)
-    {
-        if (_ghostInstance == null) return;
-
-        Vector3 worldPos = GetWorldPosition(screenPos);
-        _ghostInstance.transform.position = worldPos;
-        ApplyGhostMaterial(IsPlacementValid(worldPos));
-    }
-
-    private void TryConfirmPlacement(Vector2 screenPos)
-    {
-        Vector3 worldPos = GetWorldPosition(screenPos);
-
-        if (IsPlacementValid(worldPos))
-            ConfirmPlacement(worldPos);
-        else
-            Debug.Log("[TurretPlacer] Invalid placement position.");
-    }
-
     // Public API
 
-    // Called by TurretShopUI when a shop button is tapped
     public void BeginPlacement(GameObject turretPrefab, int cost)
     {
         if (_isPlacing) CancelPlacement();
@@ -195,11 +263,15 @@ public class TurretPlacer : MonoBehaviour
         _pendingCost   = cost;
         _isPlacing     = true;
 
+        ShowZones();
+
         _ghostInstance = Instantiate(turretPrefab, Vector3.zero, Quaternion.identity);
+        // Calculate offset BEFORE disabling colliders — bounds returns zero on disabled colliders
+        _ghostYOffset = CalculateGroundOffset(_ghostInstance);
+
         DisableGhostLogic(_ghostInstance);
     }
 
-    //Cancels placement and refunds the cost
     public void CancelPlacement()
     {
         if (_ghostInstance != null) Destroy(_ghostInstance);
@@ -207,25 +279,84 @@ public class TurretPlacer : MonoBehaviour
         _pendingPrefab = null;
         TurretShopUI.Instance?.AddMoney(_pendingCost);
         _pendingCost   = 0;
+        HideZones();
     }
 
-    // Internal logic
+    // Zone visibility
 
-    private void ConfirmPlacement(Vector3 position)
+    private void ShowZones()
+    {
+        foreach (PlacementZone z in zones) if (z != null) z.Show();
+    }
+
+    private void HideZones()
+    {
+        foreach (PlacementZone z in zones) if (z != null) z.Hide();
+    }
+
+    // Ghost positioning
+
+    private void UpdateGhostPosition(Vector2 screenPos)
+    {
+        if (_ghostInstance == null) return;
+        Vector3 groundHit = GetWorldPosition(screenPos);
+        // Lift by the offset so the bottom of the collider sits exactly on the ground
+        _ghostInstance.transform.position = groundHit + Vector3.up * _ghostYOffset;
+        ApplyGhostMaterial(IsPlacementValid(groundHit));
+    }
+
+    private void TryConfirmPlacement(Vector2 screenPos)
+    {
+        Vector3 groundHit = GetWorldPosition(screenPos);
+        if (IsPlacementValid(groundHit))
+            ConfirmPlacement(groundHit);
+    }
+
+    private void ConfirmPlacement(Vector3 groundHit)
     {
         Destroy(_ghostInstance);
         _ghostInstance = null;
 
-        GameObject turretGO = Instantiate(_pendingPrefab, position, Quaternion.identity);
+        // Place the turret lifted by the same offset used for the ghost
+        Vector3 spawnPos = groundHit + Vector3.up * _ghostYOffset;
+        GameObject turretGO = Instantiate(_pendingPrefab, spawnPos, Quaternion.identity);
         TurretController tc = turretGO.GetComponent<TurretController>();
-
         if (tc != null)
+        {
             _placedTurrets.Add(new PlacedTurret { controller = tc, cost = _pendingCost });
+        }
 
         _isPlacing     = false;
         _pendingPrefab = null;
         _pendingCost   = 0;
+        HideZones();
     }
+
+    // Calculates the Y offset needed to lift a prefab so its lowest collider
+    // point sits at Y=0 (i.e. flush with the ground surface).
+    private float CalculateGroundOffset(GameObject instance)
+    {
+        // Find the lowest point of all colliders relative to the object's pivot
+        float lowestLocal = 0f;
+        bool found = false;
+
+        foreach (Collider col in instance.GetComponentsInChildren<Collider>())
+        {
+            // bounds.min.y is in world space; subtract the instance Y to get local offset
+            float localBottom = col.bounds.min.y - instance.transform.position.y;
+            if (!found || localBottom < lowestLocal)
+            {
+                lowestLocal = localBottom;
+                found = true;
+            }
+        }
+
+        // We want the bottom to be at 0, so we lift by -lowestLocal
+        // (lowestLocal is negative when the bottom is below the pivot)
+        return found ? -lowestLocal : 0f;
+    }
+
+    // Raycasting
 
     private Vector3 GetWorldPosition(Vector2 screenPos)
     {
@@ -239,26 +370,32 @@ public class TurretPlacer : MonoBehaviour
             float t = -ray.origin.y / ray.direction.y;
             return ray.origin + ray.direction * t;
         }
-
         return Vector3.zero;
     }
 
-    private bool IsPlacementValid(Vector3 position)
+    private TurretController RaycastTurret(Vector2 screenPos)
+    {
+        Ray ray = cam.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit, 200f))
+            return hit.collider.GetComponentInParent<TurretController>();
+        return null;
+    }
+
+    private bool IsPlacementValid(Vector3 groundHit)
     {
         bool inZone = false;
         foreach (PlacementZone zone in zones)
         {
-            if (zone != null && zone.Contains(position)) { inZone = true; break; }
+            if (zone != null && zone.Contains(groundHit)) { inZone = true; break; }
         }
         if (!inZone) return false;
 
         foreach (PlacedTurret t in _placedTurrets)
         {
             if (t.controller == null) continue;
-            if (Vector3.Distance(position, t.controller.transform.position) < turretRadius * 2f)
+            if (Vector3.Distance(groundHit, t.controller.transform.position) < turretRadius * 2f)
                 return false;
         }
-
         return true;
     }
 
@@ -277,7 +414,6 @@ public class TurretPlacer : MonoBehaviour
         if (_ghostInstance == null) return;
         Material mat = valid ? validMaterial : invalidMaterial;
         if (mat == null) return;
-
         foreach (Renderer r in _ghostInstance.GetComponentsInChildren<Renderer>())
             r.material = mat;
     }
@@ -285,12 +421,9 @@ public class TurretPlacer : MonoBehaviour
     // Returns true if the screen position is over a UI element
     private bool IsPointerOverUI(Vector2 screenPos)
     {
-        PointerEventData eventData = new PointerEventData(EventSystem.current)
-        {
-            position = screenPos
-        };
+        PointerEventData data = new PointerEventData(EventSystem.current) { position = screenPos };
         List<RaycastResult> results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(eventData, results);
+        EventSystem.current.RaycastAll(data, results);
         return results.Count > 0;
     }
 }
