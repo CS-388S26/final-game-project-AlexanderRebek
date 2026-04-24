@@ -2930,12 +2930,12 @@ MonoBehaviour:
   baseSpawnInterval: 3
   baseEnemyHealth: 100
   baseEnemySpeed: 3
-  baseMoney: 150
+  baseMoney: 100
   enemyCountPerRound: 4
   spawnIntervalReduction: 0.15
   healthPerRound: 25
   speedPerRound: 1
-  moneyPerRound: 50
+  moneyPerRound: 0
 --- !u!4 &1570881301
 Transform:
   m_ObjectHideFlags: 0
@@ -4225,8 +4225,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 110, y: 0}
+  m_SizeDelta: {x: 200, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &2137394606
 MonoBehaviour:
