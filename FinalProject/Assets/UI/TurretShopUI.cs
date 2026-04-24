@@ -23,7 +23,6 @@ public class TurretShopUI : MonoBehaviour
     public TextMeshProUGUI moneyText;
     public int startingMoney = 500;
     [Header("Auto-generated buttons")]
-    [Tooltip("Button prefab. Should have: Image (icon), two TextMeshProUGUI (name + price).")]
     public GameObject buttonPrefab;
     public Transform buttonContainer;
     private int _money;

@@ -15,7 +15,6 @@ public class EnemyController : MonoBehaviour
     [Header("Health")]
     [Min(1)] public float maxHealth = 100f;
 
-    [Tooltip("Damage dealt to the player when this enemy reaches the end.")]
     public int damageToPlayer = 10;
 
     [Header("Movement events")]
@@ -55,7 +54,7 @@ public class EnemyController : MonoBehaviour
         MoveTowardsCurrentCheckpoint();
     }
 
-    // Initialization called by EnemySpawner — now accepts per-round health
+    // Initialization called by EnemySpawner
 
     public void Initialize(PathManager pathManager, float health, float speed)
     {

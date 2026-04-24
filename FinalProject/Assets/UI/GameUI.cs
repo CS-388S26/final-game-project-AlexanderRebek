@@ -2,15 +2,8 @@ using UnityEngine;
 using TMPro;
 using System.Collections;
 
-/// <summary>
-/// Displays the current round, player health, and break countdown in the HUD.
-///
-/// Setup:
-///   - Attach to a GameObject "GameUI"
-///   - Assign the three TMP text fields in the Inspector
-///   - The auto-setup script (TurretShopSetup) does NOT create this — build it manually:
-///       Canvas → add three TextMeshPro texts and assign them below
-/// </summary>
+
+// Displays the current round, player health, and break countdown in the HUD
 public class GameUI : MonoBehaviour
 {
     public static GameUI Instance { get; private set; }
@@ -29,13 +22,10 @@ public class GameUI : MonoBehaviour
     }
 
     [Header("HUD Text fields")]
-    [Tooltip("Displays 'Round X' or 'Get ready...'")]
     public TextMeshProUGUI roundText;
 
-    [Tooltip("Displays the player's current health.")]
     public TextMeshProUGUI healthText;
 
-    [Tooltip("Displays countdown seconds during break. Hidden during rounds.")]
     public TextMeshProUGUI countdownText;
 
     private Coroutine _countdownCoroutine;

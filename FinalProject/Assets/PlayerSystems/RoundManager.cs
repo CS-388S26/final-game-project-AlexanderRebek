@@ -19,7 +19,6 @@ public class RoundManager : MonoBehaviour
     public GameUI       gameUI;
 
     [Header("Round timing")]
-    [Tooltip("Seconds of prep time between rounds where no enemies spawn.")]
     public float breakBetweenRounds = 8f;
 
     [Header("Round scaling — base values (round 1)")]
