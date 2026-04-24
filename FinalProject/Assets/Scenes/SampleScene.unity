@@ -1339,10 +1339,12 @@ MonoBehaviour:
   baseEnemyCount: 8
   baseSpawnInterval: 2
   baseEnemyHealth: 100
+  baseEnemySpeed: 2
   baseMoney: 150
   enemyCountPerRound: 4
   spawnIntervalReduction: 0.15
   healthPerRound: 25
+  speedPerRound: 0.1
   moneyPerRound: 50
 --- !u!4 &1570881301
 Transform:
