@@ -17,7 +17,6 @@ public class TurretPlacer : MonoBehaviour
     public PlacementZone[] zones;
 
     [Header("Raycast")]
-    [Tooltip("Ground layer only — do NOT use Everything.")]
     public LayerMask groundLayerMask;
     public Camera cam;
 
@@ -31,7 +30,7 @@ public class TurretPlacer : MonoBehaviour
     [Header("Double tap")]
     public float doubleTapInterval = 0.3f;
 
-    [Header("Range indicator — hold input (placed turrets)")]
+    [Header("Range indicator")]
     public float holdDuration = 1f;
     [Range(0f, 1f)]
     public float pressureThreshold = 0.75f;
@@ -41,8 +40,8 @@ public class TurretPlacer : MonoBehaviour
     private LineRenderer _ghostRange;
     private GameObject _pendingPrefab;
     private int  _pendingCost;
-    private bool _isPlacing   = false;   // Ghost is following cursor, waiting for first tap
-    private bool _isDragging  = false;   // Finger is held down after first tap on map
+    private bool _isPlacing = false;
+    private bool _isDragging = false;
     private float _ghostYOffset = 0f;
 
     // Double tap state
@@ -53,15 +52,15 @@ public class TurretPlacer : MonoBehaviour
     // Hold state (placed turrets)
     private bool  _holding    = false;
     private float _holdTimer  = 0f;
-    private TurretController _holdTarget;
-    private TurretController _activeRangeTurret;
+    private GameObject _holdTarget;
+    private GameObject _activeRangeTarget;
 
     private static readonly List<PlacedTurret> _placedTurrets = new List<PlacedTurret>();
 
     private class PlacedTurret
     {
-        public TurretController controller;
-        public int cost;
+        public GameObject go;
+        public int        cost;
     }
 
     private void Start()
@@ -71,7 +70,7 @@ public class TurretPlacer : MonoBehaviour
 
     private void Update()
     {
-        _placedTurrets.RemoveAll(t => t.controller == null);
+        _placedTurrets.RemoveAll(t => t.go == null);
 
         if (_isPlacing)
             UpdatePlacementMode();
@@ -98,7 +97,7 @@ public class TurretPlacer : MonoBehaviour
         }
         else
         {
-            // Held — follow mouse until released
+            // Follow mouse until released
             if (Input.GetMouseButtonUp(0))
                 TryConfirmPlacement(Input.mousePosition);
             if (Input.GetMouseButtonDown(1))
@@ -118,12 +117,11 @@ public class TurretPlacer : MonoBehaviour
             }
             else
             {
-                // Held — follow finger until released
+                // Follow finger until released
                 if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
                     TryConfirmPlacement(touch.position);
             }
         }
-
         if (Input.touchCount > 1) CancelPlacement();
 #endif
     }
@@ -144,7 +142,7 @@ public class TurretPlacer : MonoBehaviour
         if (Input.GetMouseButtonDown(0) && !IsPointerOverUI(Input.mousePosition))
         {
             Vector2 pos = Input.mousePosition;
-            TurretController hit = RaycastTurret(pos);
+            GameObject hit = RaycastTurretGO(pos);
 
             if (hit != null && IsDoubleTap(pos)) { RemoveTurret(hit); ResetDoubleTap(); return; }
             RecordTap(pos);
@@ -175,7 +173,7 @@ public class TurretPlacer : MonoBehaviour
 
         if (touch.phase == TouchPhase.Began)
         {
-            TurretController hit = RaycastTurret(touch.position);
+            GameObject hit = RaycastTurretGO(touch.position);
             if (hit != null && IsDoubleTap(touch.position)) { RemoveTurret(hit); ResetDoubleTap(); return; }
             RecordTap(touch.position);
             if (hit != null) { BeginHold(hit); if (touch.pressure >= pressureThreshold) ShowRange(hit); }
@@ -214,34 +212,34 @@ public class TurretPlacer : MonoBehaviour
             CancelPlacement();
     }
 
-    // Ghost range circle — always visible while placing
+    // Ghost range circle
 
     private void BuildGhostRange(GameObject ghost, float range)
     {
         _ghostRange = ghost.AddComponent<LineRenderer>();
-        _ghostRange.useWorldSpace = true;
-        _ghostRange.loop = true;
+        _ghostRange.useWorldSpace   = true;
+        _ghostRange.loop            = true;
         _ghostRange.widthMultiplier = 0.1f;
-        _ghostRange.positionCount = 64;
-        _ghostRange.material = new Material(Shader.Find("Sprites/Default"));
-        _ghostRange.startColor = Color.white;
-        _ghostRange.endColor   = Color.white;
-        _ghostRange.sortingOrder = 10;
+        _ghostRange.positionCount   = 64;
+        _ghostRange.material        = new Material(Shader.Find("Sprites/Default"));
+        _ghostRange.startColor      = Color.white;
+        _ghostRange.endColor        = Color.white;
+        _ghostRange.sortingOrder    = 10;
         UpdateGhostRange(ghost.transform.position);
     }
 
     private void UpdateGhostRange(Vector3 center)
     {
         if (_ghostRange == null) return;
-        TurretController tc = _pendingPrefab?.GetComponent<TurretController>();
-        float range = tc != null ? tc.attackRange : 5f;
+        float range = GetAttackRange(_pendingPrefab);
 
         for (int i = 0; i < 64; i++)
         {
             float angle = i * Mathf.PI * 2f / 64;
-            float x = center.x + Mathf.Cos(angle) * range;
-            float z = center.z + Mathf.Sin(angle) * range;
-            _ghostRange.SetPosition(i, new Vector3(x, 0.2f, z));
+            _ghostRange.SetPosition(i, new Vector3(
+                center.x + Mathf.Cos(angle) * range,
+                0.2f,
+                center.z + Mathf.Sin(angle) * range));
         }
     }
 
@@ -262,9 +260,7 @@ public class TurretPlacer : MonoBehaviour
         _ghostYOffset  = CalculateGroundOffset(_ghostInstance);
         DisableGhostLogic(_ghostInstance);
 
-        TurretController tc = turretPrefab.GetComponent<TurretController>();
-        float range = tc != null ? tc.attackRange : 5f;
-        BuildGhostRange(_ghostInstance, range);
+        BuildGhostRange(_ghostInstance, GetAttackRange(turretPrefab));
     }
 
     public void CancelPlacement()
@@ -295,9 +291,7 @@ public class TurretPlacer : MonoBehaviour
 
         Vector3 spawnPos = groundHit + Vector3.up * _ghostYOffset;
         GameObject turretGO = Instantiate(_pendingPrefab, spawnPos, Quaternion.identity);
-        TurretController tc = turretGO.GetComponent<TurretController>();
-        if (tc != null)
-            _placedTurrets.Add(new PlacedTurret { controller = tc, cost = _pendingCost });
+        _placedTurrets.Add(new PlacedTurret { go = turretGO, cost = _pendingCost });
 
         _isPlacing     = false;
         _isDragging    = false;
@@ -317,35 +311,37 @@ public class TurretPlacer : MonoBehaviour
 
     // Hold helpers
 
-    private void BeginHold(TurretController turret) { _holding = true; _holdTimer = 0f; _holdTarget = turret; }
+    private void BeginHold(GameObject go) { _holding = true; _holdTimer = 0f; _holdTarget = go; }
     private void CancelHold() { _holding = false; _holdTimer = 0f; _holdTarget = null; }
 
     // Range indicator (placed turrets)
 
-    private void ShowRange(TurretController turret)
+    private void ShowRange(GameObject go)
     {
-        if (turret == null || turret == _activeRangeTurret) return;
+        if (go == null || go == _activeRangeTarget) return;
         HideActiveRange();
-        turret.ShowRangeIndicator();
-        _activeRangeTurret = turret;
+        go.GetComponent<TurretController>()?.ShowRangeIndicator();
+        go.GetComponent<IceTower>()?.ShowRangeIndicator();
+        _activeRangeTarget = go;
     }
 
     private void HideActiveRange()
     {
-        if (_activeRangeTurret == null) return;
-        _activeRangeTurret.HideRangeIndicator();
-        _activeRangeTurret = null;
+        if (_activeRangeTarget == null) return;
+        _activeRangeTarget.GetComponent<TurretController>()?.HideRangeIndicator();
+        _activeRangeTarget.GetComponent<IceTower>()?.HideRangeIndicator();
+        _activeRangeTarget = null;
     }
 
     // Turret removal
 
-    private void RemoveTurret(TurretController tc)
+    private void RemoveTurret(GameObject go)
     {
-        PlacedTurret entry = _placedTurrets.Find(t => t.controller == tc);
+        PlacedTurret entry = _placedTurrets.Find(t => t.go == go);
         if (entry == null) return;
         TurretShopUI.Instance?.AddMoney(entry.cost);
         _placedTurrets.Remove(entry);
-        Destroy(tc.gameObject);
+        Destroy(go);
     }
 
     // Raycasting
@@ -364,11 +360,14 @@ public class TurretPlacer : MonoBehaviour
         return Vector3.zero;
     }
 
-    private TurretController RaycastTurret(Vector2 screenPos)
+    private GameObject RaycastTurretGO(Vector2 screenPos)
     {
         Ray ray = cam.ScreenPointToRay(screenPos);
-        if (Physics.Raycast(ray, out RaycastHit hit, 200f))
-            return hit.collider.GetComponentInParent<TurretController>();
+        if (!Physics.Raycast(ray, out RaycastHit hit, 200f)) return null;
+        TurretController tc = hit.collider.GetComponentInParent<TurretController>();
+        if (tc != null) return tc.gameObject;
+        IceTower ice = hit.collider.GetComponentInParent<IceTower>();
+        if (ice != null) return ice.gameObject;
         return null;
     }
 
@@ -381,11 +380,21 @@ public class TurretPlacer : MonoBehaviour
 
         foreach (PlacedTurret t in _placedTurrets)
         {
-            if (t.controller == null) continue;
-            if (Vector3.Distance(groundHit, t.controller.transform.position) < turretRadius * 2f)
+            if (t.go == null) continue;
+            if (Vector3.Distance(groundHit, t.go.transform.position) < turretRadius * 2f)
                 return false;
         }
         return true;
+    }
+
+    private float GetAttackRange(GameObject go)
+    {
+        if (go == null) return 5f;
+        TurretController tc = go.GetComponent<TurretController>();
+        if (tc != null) return tc.attackRange;
+        IceTower ice = go.GetComponent<IceTower>();
+        if (ice != null) return ice.attackRange;
+        return 5f;
     }
 
     private float CalculateGroundOffset(GameObject instance)
@@ -403,7 +412,7 @@ public class TurretPlacer : MonoBehaviour
     private void DisableGhostLogic(GameObject ghost)
     {
         foreach (MonoBehaviour mb in ghost.GetComponentsInChildren<MonoBehaviour>())
-            if (mb is TurretController) mb.enabled = false;
+            if (mb is TurretController || mb is IceTower) mb.enabled = false;
         foreach (Collider col in ghost.GetComponentsInChildren<Collider>())
             col.enabled = false;
     }

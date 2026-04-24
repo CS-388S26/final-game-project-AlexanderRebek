@@ -1,7 +1,6 @@
 using UnityEngine;
 
-// Finds the most advanced enemy within attack range, rotates the whole turret
-// toward it, and fires straight-line bullets at regular intervals.
+// Fires straight-line bullets at regular intervals.
 
 public class TurretController : MonoBehaviour
 {
@@ -69,7 +68,7 @@ public class TurretController : MonoBehaviour
 
         if (!currentTargetValid)
         {
-            // No valid target — take whatever is most advanced
+            // No valid target
             _currentTarget = best;
             return;
         }

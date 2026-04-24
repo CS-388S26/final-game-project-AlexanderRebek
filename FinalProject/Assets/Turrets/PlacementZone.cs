@@ -13,7 +13,6 @@ public class PlacementZone : MonoBehaviour
     public Color runtimeBorderColor = new Color(0.2f, 1f, 0.4f, 0.7f);
     public float borderWidth = 0.05f;
 
-    [Tooltip("Extra height above the top face of the collider to avoid z-fighting with the ground.")]
     public float yOffset = 0.05f;
 
     private Collider _collider;

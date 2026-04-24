@@ -1,5 +1,7 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 
 // Manages the player health.
 public class PlayerHealth : MonoBehaviour
@@ -14,6 +16,10 @@ public class PlayerHealth : MonoBehaviour
 
     [Header("Stats")]
     public int maxHealth = 100;
+
+    [Header("Game Over")]
+    public string mainMenuScene = "MainMenu";
+    public float gameOverDelay = 3f;
 
     [Header("Events")]
     public UnityEvent<int> onHealthChanged;
@@ -41,8 +47,22 @@ public class PlayerHealth : MonoBehaviour
 
     private void Die()
     {
+        if (IsDead) return;
         IsDead = true;
         onDeath?.Invoke();
         Debug.Log("[PlayerHealth] Game Over!");
+
+        if (GameOverScreen.Instance != null)
+            GameOverScreen.Instance.Show();
+        else
+            Debug.LogError("[PlayerHealth] GameOverScreen.Instance is null!");
+
+        StartCoroutine(ReturnToMenuRoutine());
+    }
+
+    private IEnumerator ReturnToMenuRoutine()
+    {
+        yield return new WaitForSeconds(gameOverDelay);
+        SceneManager.LoadScene(mainMenuScene);
     }
 }
