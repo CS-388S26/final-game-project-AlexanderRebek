@@ -29,7 +29,7 @@ Transform:
   m_GameObject: {fileID: 2916958238726269623}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -7.9893565, y: -8.24049, z: -9.729019}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 6240972893169608552}
@@ -105,7 +105,7 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.5
+  m_Radius: 2
   m_Height: 2
   m_Direction: 1
   m_Center: {x: 0, y: 0, z: 0}
@@ -126,6 +126,10 @@ MonoBehaviour:
   attackRange: 15
   fireRate: 1
   rotationSpeed: 120
+  targetUpdateInterval: 0.25
+  targetSwitchThreshold: 1
+  rangeColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  rangeLineWidth: 0.1
 --- !u!1 &8881097415267132002
 GameObject:
   m_ObjectHideFlags: 0

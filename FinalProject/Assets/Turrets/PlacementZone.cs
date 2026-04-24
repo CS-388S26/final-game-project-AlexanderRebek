@@ -28,6 +28,18 @@ public class PlacementZone : MonoBehaviour
     //Returns true if worldPoint is inside this zone collider bounds
     public bool Contains(Vector3 worldPoint)
     {
+        // Transform the point into the collider's local space so rotation is respected (OBB check)
+        Vector3 localPoint = transform.InverseTransformPoint(worldPoint);
+        BoxCollider box = _collider as BoxCollider;
+        if (box != null)
+        {
+            Vector3 half = box.size * 0.5f;
+            Vector3 local = localPoint - box.center;
+            return Mathf.Abs(local.x) <= half.x &&
+                   Mathf.Abs(local.y) <= half.y &&
+                   Mathf.Abs(local.z) <= half.z;
+        }
+        // Fallback for non-box colliders
         return _collider.bounds.Contains(worldPoint);
     }
 
@@ -51,18 +63,16 @@ public class PlacementZone : MonoBehaviour
     // Builds a quad matching the debug 
     private void BuildRuntimeVisual()
     {
-        Bounds b = _collider.bounds;
-
-        float worldY = b.max.y + yOffset;
-        Vector3 center = new Vector3(b.center.x, worldY, b.center.z);
+        BoxCollider box = _collider as BoxCollider;
+        float w = box != null ? box.size.x : 1f;
+        float d = box != null ? box.size.z : 1f;
+        float localTopY = box != null ? box.center.y + box.size.y * 0.5f : 0.5f;
 
         _runtimeVisual = new GameObject("ZoneVisual");
-
-        _runtimeVisual.transform.position = center;
-        _runtimeVisual.transform.rotation = Quaternion.identity;
-
-        float w = b.size.x;
-        float d = b.size.z;
+        _runtimeVisual.transform.SetParent(transform, false);
+        _runtimeVisual.transform.localPosition = new Vector3(box != null ? box.center.x : 0f, localTopY + yOffset, box != null ? box.center.z : 0f);
+        _runtimeVisual.transform.localRotation = Quaternion.identity;
+        _runtimeVisual.transform.localScale    = Vector3.one;
 
         // Filled quad
         GameObject fill = new GameObject("Fill");
